@@ -8,6 +8,7 @@ MAINTAINER crockpotveggies
 USER root
 
 # install dev tools
+RUN apt-get update -y
 RUN apt-get install -y curl tar sudo openssh-server openssh-client rsync
 
 # passwordless ssh
@@ -27,7 +28,7 @@ ENV JAVA_HOME /usr/java/default/
 ENV PATH $PATH:$JAVA_HOME/bin
 
 # hadoop
-RUN curl -s http://www.eu.apache.org/dist/hadoop/common/hadoop-2.6.0/hadoop-2.6.0.tar.gz | tar -xz -C /usr/local/
+RUN curl -s http://www.us.apache.org/dist/hadoop/common/hadoop-2.6.0/hadoop-2.6.0.tar.gz | tar -xz -C /usr/local/
 RUN cd /usr/local && ln -s ./hadoop-2.6.0 hadoop
 
 ENV HADOOP_PREFIX /usr/local/hadoop
@@ -50,7 +51,7 @@ RUN $HADOOP_PREFIX/bin/hdfs namenode -format
 
 # fixing the libhadoop.so like a boss
 RUN rm  /usr/local/hadoop/lib/native/*
-RUN curl -Ls http://dl.bintray.com/sequenceiq/sequenceiq-bin/hadoop-native-64-2.6.0.tar|tar -xz -C /usr/local/hadoop/lib/native/
+RUN curl -Ls http://dl.bintray.com/sequenceiq/sequenceiq-bin/hadoop-native-64-2.6.0.tar | tar -x -C /usr/local/hadoop/lib/native/
 
 ADD ssh_config /root/.ssh/config
 RUN chmod 600 /root/.ssh/config
@@ -78,12 +79,17 @@ RUN ls -la /usr/local/hadoop/etc/hadoop/*-env.sh
 # fix the 254 error code
 RUN sed  -i "/^[^#]*UsePAM/ s/.*/#&/"  /etc/ssh/sshd_config
 RUN echo "UsePAM no" >> /etc/ssh/sshd_config
+RUN echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config
+RUN echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
 RUN echo "Port 2122" >> /etc/ssh/sshd_config
 
+# update Hadoop SSH opts
+RUN echo "export HADOOP_SSH_OPTS=\"-p 2122 -o ConnectTimeout=1 -o SendEnv=HADOOP_CONF_DIR\"" >> $HADOOP_PREFIX/etc/hadoop/hadoop-env.sh
 
+# perform a fresh run
 RUN service ssh start && $HADOOP_PREFIX/etc/hadoop/hadoop-env.sh && $HADOOP_PREFIX/sbin/start-dfs.sh && $HADOOP_PREFIX/sbin/start-yarn.sh && $HADOOP_PREFIX/bin/hdfs dfs -mkdir -p /user/root
 RUN service ssh start && $HADOOP_PREFIX/etc/hadoop/hadoop-env.sh && $HADOOP_PREFIX/sbin/start-dfs.sh && $HADOOP_PREFIX/sbin/start-yarn.sh && $HADOOP_PREFIX/bin/hdfs dfs -put $HADOOP_PREFIX/etc/hadoop/ input
 
 CMD ["/etc/bootstrap.sh", "-d"]
 
-EXPOSE 50020 50090 50070 50010 50075 8031 8032 8033 8040 8042 49707 22 8088 8030
+EXPOSE 50020 50090 50070 50010 50075 8031 8032 8033 8040 8042 49707 2122 8088 8030
